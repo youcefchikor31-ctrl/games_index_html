@@ -8,8 +8,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <!-- مكتبة TWEEN للأنيميشن السلسة -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
 
     <link href="https://fonts.googleapis.com/css2?family=Syncopate:wght@700&family=Manrope:wght@400;700&display=swap" rel="stylesheet">
     
@@ -38,7 +36,7 @@
 
     <div id="loader">
         <div class="spinner"></div>
-        <p id="loading-text">جاري التجهيز...</p>
+        <p id="loading-text">جاري التجهيز (0%)</p>
     </div>
 
     <canvas id="webgl-canvas"></canvas>
@@ -93,7 +91,6 @@
         
         particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
         
-        // ماتريال الغبار
         const particleMaterial = new THREE.PointsMaterial({
             color: 0xcccccc,
             size: 0.5,
@@ -105,72 +102,60 @@
         const particles = new THREE.Points(particleGeometry, particleMaterial);
         scene.add(particles);
 
-        // --- 3. تحميل السيارة ---
+        // --- 3. تحميل السيارة والأنيميشن المدمج ---
         const loader = new THREE.GLTFLoader();
         let carModel;
+        
+        // متغيرات للأنيميشن
         let isDrifting = false;
+        let driftProgress = 0; // يروح من 0 إلى 1
+        
+        // نقطة البداية والنهاية
+        const startZ = -60;
+        const startX = 20;
+        const endZ = 0;
+        const endX = -2;
+        const startRot = Math.PI; // عاطية بالظهر
+        const endRot = Math.PI / 4; // تقابلك بالجنب
 
         loader.load('car.glb', function (gltf) {
             carModel = gltf.scene;
             
-            // تصغير السيارة (عدلها إذا بانت كبيرة)
+            // تصغير السيارة 
             carModel.scale.set(0.4, 0.4, 0.4); 
-            
-            // مكان البداية (بعيدة في اللور ومخفية شوية على اليمين)
-            carModel.position.set(20, -1, -50); 
-            // زاوية البداية (عاطية بالظهر)
-            carModel.rotation.y = Math.PI; 
+            carModel.position.set(startX, -1, startZ); 
+            carModel.rotation.y = startRot; 
             
             scene.add(carModel);
 
             document.getElementById('loader').style.opacity = '0';
             setTimeout(() => {
                 document.getElementById('loader').style.display = 'none';
-                startDriftAnimation();
+                // تبدا الأنيميشن
+                isDrifting = true;
+                particleMaterial.opacity = 0.5;
             }, 500);
+        },
+        function (xhr) {
+            const percent = (xhr.loaded / xhr.total * 100);
+            if(percent !== Infinity) {
+                document.getElementById('loading-text').innerText = `جاري التجهيز (${Math.round(percent)}%)`;
+            }
+        },
+        function (error) {
+            console.error('Error loading model:', error);
+            document.getElementById('loading-text').innerText = 'حدث خطأ!';
         });
 
-        // --- 4. برمجة أنيميشن الدريفت بـ Tween.js ---
-        function startDriftAnimation() {
-            isDrifting = true;
-            particleMaterial.opacity = 0.5; // نشعلو الغبار
-
-            // حركة 1: السيارة تجي طايرة للقدام (Z) وتهرب لليسار شوية (X)
-            new TWEEN.Tween(carModel.position)
-                .to({ x: -2, z: 0 }, 1500)
-                .easing(TWEEN.Easing.Quadratic.Out)
-                .start();
-
-            // حركة 2: دوران الدريفت (السيارة تدور 180 درجة باش تقابلك)
-            new TWEEN.Tween(carModel.rotation)
-                .to({ y: Math.PI / 4 }, 1500) // تقابلك بالجنب (فيراج)
-                .easing(TWEEN.Easing.Cubic.Out)
-                .onUpdate(() => {
-                    // الغبار يتبع اللور تاع السيارة
-                    updateDustParticles(carModel.position.x + 2, carModel.position.z + 2);
-                })
-                .onComplete(() => {
-                    // كي تحبس، نطفيو الغبار ونطلقو التحكم
-                    isDrifting = false;
-                    particleMaterial.opacity = 0;
-                    controls.enabled = true;
-                    controls.autoRotate = true; // تبدا تدور وحدها ببطء
-                })
-                .start();
-        }
-
-        // تحديث مكان الغبار
+        // دالة تحديث الغبار
         function updateDustParticles(x, z) {
             const positions = particles.geometry.attributes.position.array;
             for (let i = 0; i < particleCount; i++) {
-                // إرجاع الجزيئات لنقطة الانطلاق (خلف العجلات)
                 if (positions[i * 3 + 1] > 2 || positions[i * 3 + 1] < -1) {
                     positions[i * 3] = x + (Math.random() - 0.5);
-                    positions[i * 3 + 1] = -1; // على مستوى الأرض
+                    positions[i * 3 + 1] = -1;
                     positions[i * 3 + 2] = z + (Math.random() - 0.5);
                 }
-                
-                // تحريكها للأعلى وللخارج
                 positions[i * 3] += particleVelocities[i].x;
                 positions[i * 3 + 1] += particleVelocities[i].y;
                 positions[i * 3 + 2] += particleVelocities[i].z;
@@ -178,17 +163,44 @@
             particles.geometry.attributes.position.needsUpdate = true;
         }
 
-        // --- 5. حلقة الأنيميشن ---
-        function animate(time) {
+        // --- دالة Lerp (للحركة السلسة والتباطؤ) ---
+        function lerp(start, end, amt) {
+            return (1 - amt) * start + amt * end;
+        }
+
+        // --- 4. حلقة الأنيميشن ---
+        function animate() {
             requestAnimationFrame(animate);
-            TWEEN.update(time); // تشغيل مكتبة الأنيميشن
             
+            if (isDrifting && carModel) {
+                // تزيد تدريجياً (السرعة)
+                driftProgress += 0.015; 
+                
+                if (driftProgress < 1) {
+                    // حركة السيارة
+                    carModel.position.z = lerp(startZ, endZ, Math.sin(driftProgress * Math.PI / 2));
+                    carModel.position.x = lerp(startX, endX, Math.sin(driftProgress * Math.PI / 2));
+                    carModel.rotation.y = lerp(startRot, endRot, Math.sin(driftProgress * Math.PI / 2));
+                    
+                    // الغبار يتبع اللور
+                    updateDustParticles(carModel.position.x + 2, carModel.position.z + 2);
+                    
+                    // رجفة الكاميرا (Camera Shake)
+                    camera.position.x = (Math.random() - 0.5) * 0.1;
+                    camera.position.y = 3 + (Math.random() - 0.5) * 0.1;
+                } else {
+                    // كمل الدريفت
+                    isDrifting = false;
+                    particleMaterial.opacity = 0; // إخفاء الغبار
+                    camera.position.set(0, 3, 12); // نرجعو الكاميرا مريقلة
+                    
+                    controls.enabled = true; // نطلقو التحكم
+                    controls.autoRotate = true; // دور ببطء
+                }
+            }
+
             if (!isDrifting && controls.enabled) {
                 controls.update(); 
-            } else if (isDrifting) {
-                // الكاميرا تتهز شوية باش تعطي إحساس السرعة والقوة
-                camera.position.x = (Math.random() - 0.5) * 0.1;
-                camera.position.y = 3 + (Math.random() - 0.5) * 0.1;
             }
 
             renderer.render(scene, camera);

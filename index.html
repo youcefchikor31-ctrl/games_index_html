@@ -55,9 +55,9 @@
         const canvas = document.getElementById('webgl-canvas');
         const scene = new THREE.Scene();
         
-        // الكاميرا ثابتة نسبياً باش نشوفو العرض
+        // **[تعديل]:** الكاميرا بعيدة الفوق باش تبان الطوموبيل صغيرة وبعيدة
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 3, 12); 
+        camera.position.set(0, 5, 20); // Z كانت 12، رديتها 20. Y كانت 3، رديتها 5.
 
         const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -65,63 +65,63 @@
 
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
-        controls.enabled = false; // نوقفوا التحكم حتى يكمل الدريفت
+        controls.enabled = false;
 
         const ambientLight = new THREE.AmbientLight(0xffffff, 1.2); scene.add(ambientLight);
         const dirLight = new THREE.DirectionalLight(0xffffff, 2.5); dirLight.position.set(10, 10, 10); scene.add(dirLight);
         const backLight = new THREE.DirectionalLight(0xffffff, 1.5); backLight.position.set(-10, 5, -10); scene.add(backLight);
 
-        // --- 2. نظام الغبار (Particles) ---
-        const particleCount = 200;
+        // --- 2. نظام الغبار (Smoke Particles) ---
+        const particleCount = 500; // **[تعديل]:** زدنا عدد الغبار
         const particleGeometry = new THREE.BufferGeometry();
         const particlePositions = new Float32Array(particleCount * 3);
         const particleVelocities = [];
 
         for (let i = 0; i < particleCount; i++) {
             particlePositions[i * 3] = 0;
-            particlePositions[i * 3 + 1] = -100; // مخفيين تحت الأرض في البداية
+            particlePositions[i * 3 + 1] = -100; // مخفي
             particlePositions[i * 3 + 2] = 0;
             
             particleVelocities.push({
-                x: (Math.random() - 0.5) * 0.2,
-                y: Math.random() * 0.1 + 0.05,
-                z: (Math.random() - 0.5) * 0.2
+                x: (Math.random() - 0.5) * 0.5, // **[تعديل]:** انتشار أكبر
+                y: Math.random() * 0.2 + 0.05,
+                z: (Math.random() - 0.5) * 0.5
             });
         }
         
         particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
         
+        // **[تعديل]:** ماتريال الغبار (رمادي، كبير، شبه شفاف)
         const particleMaterial = new THREE.PointsMaterial({
-            color: 0xcccccc,
-            size: 0.5,
+            color: 0x888888, 
+            size: 2.0, 
             transparent: true,
             opacity: 0,
-            blending: THREE.AdditiveBlending
+            depthWrite: false, // باش ما يقطعش المجسم
+            blending: THREE.AdditiveBlending 
         });
         
         const particles = new THREE.Points(particleGeometry, particleMaterial);
         scene.add(particles);
 
-        // --- 3. تحميل السيارة والأنيميشن المدمج ---
+        // --- 3. تحميل السيارة ---
         const loader = new THREE.GLTFLoader();
         let carModel;
         
-        // متغيرات للأنيميشن
         let isDrifting = false;
-        let driftProgress = 0; // يروح من 0 إلى 1
+        let driftProgress = 0; 
         
-        // نقطة البداية والنهاية
-        const startZ = -60;
-        const startX = 20;
+        // **[تعديل]:** مسار الدريفت. تبدا بعيدة بزااف (Z=-100) وتجي لـ Z=0
+        const startZ = -100;
+        const startX = 30;
         const endZ = 0;
-        const endX = -2;
-        const startRot = Math.PI; // عاطية بالظهر
-        const endRot = Math.PI / 4; // تقابلك بالجنب
+        const endX = 0;
+        const startRot = Math.PI; 
+        const endRot = Math.PI / 4; 
 
         loader.load('car.glb', function (gltf) {
             carModel = gltf.scene;
             
-            // تصغير السيارة 
             carModel.scale.set(0.4, 0.4, 0.4); 
             carModel.position.set(startX, -1, startZ); 
             carModel.rotation.y = startRot; 
@@ -131,9 +131,8 @@
             document.getElementById('loader').style.opacity = '0';
             setTimeout(() => {
                 document.getElementById('loader').style.display = 'none';
-                // تبدا الأنيميشن
                 isDrifting = true;
-                particleMaterial.opacity = 0.5;
+                particleMaterial.opacity = 0.6; // نشعلو الغبار
             }, 500);
         },
         function (xhr) {
@@ -143,18 +142,20 @@
             }
         },
         function (error) {
-            console.error('Error loading model:', error);
+            console.error('Error:', error);
             document.getElementById('loading-text').innerText = 'حدث خطأ!';
         });
 
-        // دالة تحديث الغبار
+        // --- تحديث الغبار ---
         function updateDustParticles(x, z) {
             const positions = particles.geometry.attributes.position.array;
             for (let i = 0; i < particleCount; i++) {
-                if (positions[i * 3 + 1] > 2 || positions[i * 3 + 1] < -1) {
-                    positions[i * 3] = x + (Math.random() - 0.5);
-                    positions[i * 3 + 1] = -1;
-                    positions[i * 3 + 2] = z + (Math.random() - 0.5);
+                // نردوا جزء من الغبار اللور باش يدير تأثير دخان متصل
+                if (positions[i * 3 + 1] > 3 || positions[i * 3 + 1] < -1) {
+                    // الغبار يخرج من اللور (عكس اتجاه الحركة)
+                    positions[i * 3] = x + (Math.random() - 0.5) * 2; 
+                    positions[i * 3 + 1] = -1; // من الأرض
+                    positions[i * 3 + 2] = z + 2 + (Math.random() - 0.5) * 2; // ورا الطوموبيل
                 }
                 positions[i * 3] += particleVelocities[i].x;
                 positions[i * 3 + 1] += particleVelocities[i].y;
@@ -163,7 +164,6 @@
             particles.geometry.attributes.position.needsUpdate = true;
         }
 
-        // --- دالة Lerp (للحركة السلسة والتباطؤ) ---
         function lerp(start, end, amt) {
             return (1 - amt) * start + amt * end;
         }
@@ -173,29 +173,31 @@
             requestAnimationFrame(animate);
             
             if (isDrifting && carModel) {
-                // تزيد تدريجياً (السرعة)
-                driftProgress += 0.015; 
+                // **[تعديل]:** سرعة الدريفت
+                driftProgress += 0.01; 
                 
                 if (driftProgress < 1) {
-                    // حركة السيارة
-                    carModel.position.z = lerp(startZ, endZ, Math.sin(driftProgress * Math.PI / 2));
-                    carModel.position.x = lerp(startX, endX, Math.sin(driftProgress * Math.PI / 2));
-                    carModel.rotation.y = lerp(startRot, endRot, Math.sin(driftProgress * Math.PI / 2));
+                    // معادلة حركة ناعمة (Ease Out)
+                    const ease = Math.sin(driftProgress * Math.PI / 2);
                     
-                    // الغبار يتبع اللور
-                    updateDustParticles(carModel.position.x + 2, carModel.position.z + 2);
+                    carModel.position.z = lerp(startZ, endZ, ease);
+                    carModel.position.x = lerp(startX, endX, ease);
+                    carModel.rotation.y = lerp(startRot, endRot, ease);
                     
-                    // رجفة الكاميرا (Camera Shake)
-                    camera.position.x = (Math.random() - 0.5) * 0.1;
-                    camera.position.y = 3 + (Math.random() - 0.5) * 0.1;
+                    // الغبار يخدم غير كي تقرب الطوموبيل (تفوت النص) باش يبان الفران
+                    if(driftProgress > 0.4) {
+                       updateDustParticles(carModel.position.x, carModel.position.z);
+                    }
+                    
+                    // رجفة خفيفة جداً للكاميرا
+                    camera.position.x = (Math.random() - 0.5) * 0.05;
                 } else {
-                    // كمل الدريفت
                     isDrifting = false;
-                    particleMaterial.opacity = 0; // إخفاء الغبار
-                    camera.position.set(0, 3, 12); // نرجعو الكاميرا مريقلة
+                    particleMaterial.opacity = 0; // طفي الغبار
+                    camera.position.x = 0; // ريقل الكاميرا
                     
-                    controls.enabled = true; // نطلقو التحكم
-                    controls.autoRotate = true; // دور ببطء
+                    controls.enabled = true; 
+                    controls.autoRotate = true; 
                 }
             }
 

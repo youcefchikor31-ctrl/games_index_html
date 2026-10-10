@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Cinematic Spin Experience</title>
+    <title>3D Cinematic Spin - Optimized</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
@@ -52,38 +52,35 @@
     </div>
 
     <script>
-        // --- 1. الإعدادات ---
         const canvas = document.getElementById('webgl-canvas');
         const scene = new THREE.Scene();
         
-        // الكاميرا
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.set(0, 5, 20); 
 
-        const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+        const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: false, alpha: true }); // antialias: false يخفف اللاغ
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        // تخفيض جودة الرندر للهواتف باش ما يصيرش لاغ
+        renderer.setPixelRatio(window.devicePixelRatio > 1.5 ? 1.5 : window.devicePixelRatio);
 
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.enabled = false;
 
         const ambientLight = new THREE.AmbientLight(0xffffff, 1.2); scene.add(ambientLight);
-        const dirLight = new THREE.DirectionalLight(0xffffff, 2.5); dirLight.position.set(10, 10, 10); scene.add(dirLight);
-        const backLight = new THREE.DirectionalLight(0xffffff, 1.5); backLight.position.set(-10, 5, -10); scene.add(backLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 2.0); dirLight.position.set(10, 10, 10); scene.add(dirLight);
 
-        // --- 2. نظام الغبار الأحمر ---
-        const particleCount = 800; 
+        // --- تحسين نظام الغبار ---
+        const particleCount = 300; // نقصت العدد باش المعالج يرتاح
         const particleGeometry = new THREE.BufferGeometry();
         const particlePositions = new Float32Array(particleCount * 3);
         const particleVelocities = [];
 
         for (let i = 0; i < particleCount; i++) {
             particlePositions[i * 3] = 0;
-            particlePositions[i * 3 + 1] = -100; // مخفي في البداية
+            particlePositions[i * 3 + 1] = -100; 
             particlePositions[i * 3 + 2] = 0;
             
-            // انتشار الغبار لجميع الاتجاهات
             particleVelocities.push({
                 x: (Math.random() - 0.5) * 0.5,
                 y: Math.random() * 0.15 + 0.05,
@@ -95,7 +92,7 @@
         
         const particleMaterial = new THREE.PointsMaterial({
             color: 0xff1111, 
-            size: 2.5, 
+            size: 3.0, // كبرت الحبة باش نعوض نقص العدد
             transparent: true,
             opacity: 0,
             depthWrite: false,
@@ -105,30 +102,23 @@
         const particles = new THREE.Points(particleGeometry, particleMaterial);
         scene.add(particles);
 
-        // --- 3. تحميل السيارة والأنيميشن المخصصة ---
         const loader = new THREE.GLTFLoader();
         let carModel;
-        
         let isSpinning = false;
         let animProgress = 0; 
         
-        // المواقع (تجي من القدام وعلى ليمن، وتهبط للوسط)
         const startZ = -150; 
         const startX = 40;    
         const endZ = 2;      
         const endX = 0;     
-        
-        // الدوران: تبدا عاطية وجهها شوية ليك، ومن بعد دير دورة 360 كاملة (Math.PI * 2)
         const startRot = Math.PI / 8;             
         const endRot = startRot + (Math.PI * 2);    
 
         loader.load('car.glb', function (gltf) {
             carModel = gltf.scene;
             carModel.scale.set(0.4, 0.4, 0.4); 
-            
             carModel.position.set(startX, -1, startZ); 
             carModel.rotation.y = startRot; 
-            
             scene.add(carModel);
 
             document.getElementById('loader').style.opacity = '0';
@@ -136,25 +126,17 @@
                 document.getElementById('loader').style.display = 'none';
                 isSpinning = true;
             }, 500);
-        },
-        function (xhr) {
-            const percent = (xhr.loaded / xhr.total * 100);
-            if(percent !== Infinity) {
-                document.getElementById('loading-text').innerText = `جاري التجهيز (${Math.round(percent)}%)`;
-            }
         });
 
-        // --- تحديث الغبار مع الدورة الكاملة ---
+        // دالة تحريك الغبار المخصصة
         function updateDustParticles(x, z, emitNewDust) {
             const positions = particles.geometry.attributes.position.array;
             for (let i = 0; i < particleCount; i++) {
                 if (emitNewDust && (positions[i * 3 + 1] > 3 || positions[i * 3 + 1] < -1)) {
-                    // بما أنها تدور، الغبار يخرج من تحتها على شكل حلقة
                     positions[i * 3] = x + (Math.random() - 0.5) * 4; 
                     positions[i * 3 + 1] = -1; 
                     positions[i * 3 + 2] = z + (Math.random() - 0.5) * 4; 
                 }
-                
                 positions[i * 3] += particleVelocities[i].x;
                 positions[i * 3 + 1] += particleVelocities[i].y;
                 positions[i * 3 + 2] += particleVelocities[i].z;
@@ -162,45 +144,34 @@
             particles.geometry.attributes.position.needsUpdate = true;
         }
 
-        // --- دوال الحركة السلسة ---
         function lerp(start, end, amt) { return (1 - amt) * start + amt * end; }
-        
-        // Ease Out Cubic للفرملة الناعمة
         function easeOutCubic(x) { return 1 - Math.pow(1 - x, 3); }
-        // Ease In Out للالتفاف (تبدا دور بشوية، تسرع، وتحبس بشوية)
         function easeInOutQuad(x) { return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2; }
 
-        // --- 4. حلقة الأنيميشن ---
         function animate() {
             requestAnimationFrame(animate);
             
             if (isSpinning && carModel) {
-                // السرعة العامة للأنيميشن (تقريبا 3 ثواني ونصف)
-                animProgress += 0.005; 
+                animProgress += 0.006; // سرعة الأنيميشن
                 
                 if (animProgress < 1) {
-                    
-                    // 1. الحركة الانتقالية: توصل للقدام بسرعة وتفريني (تكمل في 70% من الوقت)
                     let moveP = Math.min(1, animProgress * 1.4); 
                     let moveEase = easeOutCubic(moveP);
                     
                     carModel.position.x = lerp(startX, endX, moveEase);
                     carModel.position.z = lerp(startZ, endZ, moveEase);
                     
-                    // 2. الحركة الدورانية: تبدا الدورة 360 كي تقرب (من 30% لـ 100% من الوقت)
                     let rotP = Math.max(0, Math.min(1, (animProgress - 0.3) * 1.42));
                     let rotEase = easeInOutQuad(rotP);
                     
                     carModel.rotation.y = lerp(startRot, endRot, rotEase);
                     
-                    // 3. الغبار الأحمر: يشعل في وقت الفرملة والدورة (بين 30% و 85%)
                     let isHardSpinning = animProgress > 0.3 && animProgress < 0.85;
                     
                     if (isHardSpinning) {
                         particleMaterial.opacity = 0.8;
-                        // رجفة خفيفة جدا للكاميرا تعطي إحساس بالقوة
-                        camera.position.x = (Math.random() - 0.5) * 0.08; 
-                        camera.position.y = 5 + (Math.random() - 0.5) * 0.08;
+                        camera.position.x = (Math.random() - 0.5) * 0.05; // رجفة خفيفة جدا
+                        camera.position.y = 5 + (Math.random() - 0.5) * 0.05;
                     } else {
                         camera.position.x = 0;
                         camera.position.y = 5;
@@ -209,7 +180,6 @@
                     updateDustParticles(carModel.position.x, carModel.position.z, isHardSpinning);
 
                 } else {
-                    // كي تكمل الأنيميشن تماما
                     isSpinning = false;
                     camera.position.x = 0; 
                     camera.position.y = 5;
@@ -217,7 +187,7 @@
                     controls.autoRotate = true; 
                 }
             } else if (!isSpinning && carModel) {
-                // تلاشي الغبار الأحمر في الهواء بعد توقف السيارة
+                // الكود كان يحسب الغبار ديما، دروك يحسبو غير يلا كان يبان
                 if (particleMaterial.opacity > 0) {
                     particleMaterial.opacity -= 0.01;
                     updateDustParticles(0, 0, false);

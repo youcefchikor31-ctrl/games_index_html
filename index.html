@@ -3,45 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Car WebGL</title>
+    <title>3D Drift Experience</title>
     
-    <!-- مكتبة Three.js الأساسية -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- مكتبة تحميل ملفات .glb -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-    <!-- مكتبة للتحكم بالكاميرا بالماوس (OrbitControls) -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- مكتبة TWEEN للأنيميشن السلسة -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
 
     <link href="https://fonts.googleapis.com/css2?family=Syncopate:wght@700&family=Manrope:wght@400;700&display=swap" rel="stylesheet">
     
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { background-color: #050505; color: #fff; font-family: 'Manrope', sans-serif; overflow: hidden; }
+        #webgl-canvas { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
         
-        #webgl-canvas {
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1;
-        }
-
-        /* شاشة التحميل */
         #loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #050505; z-index: 9999;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            transition: opacity 0.5s ease;
+            background: #050505; z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center; transition: opacity 0.5s ease;
         }
-        .spinner {
-            width: 50px; height: 50px;
-            border: 3px solid rgba(255,255,255,0.1); border-top-color: #fff;
-            border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;
-        }
+        .spinner { width: 50px; height: 50px; border: 3px solid rgba(255,255,255,0.1); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* واجهة المستخدم تجي فوق الـ 3D */
-        .ui-layer {
-            position: relative; z-index: 10; width: 100%; height: 100vh;
-            display: flex; flex-direction: column; justify-content: space-between;
-            padding: 40px; pointer-events: none;
-        }
+        .ui-layer { position: relative; z-index: 10; width: 100%; height: 100vh; display: flex; flex-direction: column; justify-content: space-between; padding: 40px; pointer-events: none; }
         header { display: flex; justify-content: space-between; align-items: center; pointer-events: auto; }
         .logo { font-family: 'Syncopate', sans-serif; font-size: 1.5rem; letter-spacing: 2px; }
         .hero-text { text-align: left; pointer-events: auto; }
@@ -52,123 +36,165 @@
 </head>
 <body>
 
-    <!-- شاشة التحميل -->
     <div id="loader">
         <div class="spinner"></div>
-        <p id="loading-text">جاري تحميل السيارة (0%)</p>
+        <p id="loading-text">جاري التجهيز...</p>
     </div>
 
-    <!-- الكانفاس لي يترسم فيه 3D -->
     <canvas id="webgl-canvas"></canvas>
 
-    <!-- الواجهة -->
     <div class="ui-layer">
         <header><div class="logo">GARAGE 3D</div></header>
         <div class="hero-text">
-            <h1>Experience<br>The Drive</h1>
-            <p>يمكنك تحريك السيارة بإصبعك (الدوران والتكبير). التصيير يتم بالكامل عبر أكواد الجافاسكريبت.</p>
+            <h1>DRIFT<br>MODE</h1>
+            <p>السيارة تدخل بدريفت. بعد التوقف يمكنك تحريكها للرؤية من كل الزوايا.</p>
             <button>Book Now</button>
         </div>
     </div>
 
     <script>
-        // 1. إعداد المشهد، الكاميرا والريندر
+        // --- 1. الإعدادات ---
         const canvas = document.getElementById('webgl-canvas');
         const scene = new THREE.Scene();
         
-        // الكاميرا تبدا بعيدة بزااااف الفوق (Y=20, Z=50) باش تبان جاية من بعيد
+        // الكاميرا ثابتة نسبياً باش نشوفو العرض
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 20, 50); 
+        camera.position.set(0, 3, 12); 
 
         const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-        // 2. التحكم بالكاميرا
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
-        controls.autoRotate = true;
-        controls.autoRotateSpeed = 2.0; // السرعة باش تبان ديناميكية
-        controls.maxPolarAngle = Math.PI / 2 - 0.05; // باش ما تهبطش الكاميرا تحت الأرض
-        controls.enabled = false; // نبلوكو التحكم بالصبع حتى تكمل الأنيميشن تاع الدخلة
+        controls.enabled = false; // نوقفوا التحكم حتى يكمل الدريفت
 
-        // 3. الإضاءة (باش الطوموبيل تبرق مليح)
-        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
-        scene.add(ambientLight);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 1.2); scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 2.5); dirLight.position.set(10, 10, 10); scene.add(dirLight);
+        const backLight = new THREE.DirectionalLight(0xffffff, 1.5); backLight.position.set(-10, 5, -10); scene.add(backLight);
 
-        const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
-        dirLight.position.set(10, 10, 10);
-        scene.add(dirLight);
+        // --- 2. نظام الغبار (Particles) ---
+        const particleCount = 200;
+        const particleGeometry = new THREE.BufferGeometry();
+        const particlePositions = new Float32Array(particleCount * 3);
+        const particleVelocities = [];
+
+        for (let i = 0; i < particleCount; i++) {
+            particlePositions[i * 3] = 0;
+            particlePositions[i * 3 + 1] = -100; // مخفيين تحت الأرض في البداية
+            particlePositions[i * 3 + 2] = 0;
+            
+            particleVelocities.push({
+                x: (Math.random() - 0.5) * 0.2,
+                y: Math.random() * 0.1 + 0.05,
+                z: (Math.random() - 0.5) * 0.2
+            });
+        }
         
-        const backLight = new THREE.DirectionalLight(0xffffff, 1.5);
-        backLight.position.set(-10, 5, -10);
-        scene.add(backLight);
+        particleGeometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+        
+        // ماتريال الغبار
+        const particleMaterial = new THREE.PointsMaterial({
+            color: 0xcccccc,
+            size: 0.5,
+            transparent: true,
+            opacity: 0,
+            blending: THREE.AdditiveBlending
+        });
+        
+        const particles = new THREE.Points(particleGeometry, particleMaterial);
+        scene.add(particles);
 
-        // 4. تحميل ملف السيارة
+        // --- 3. تحميل السيارة ---
         const loader = new THREE.GLTFLoader();
         let carModel;
-        
-        // متغيرات للأنيميشن السينمائية
-        let isIntroAnimation = false;
+        let isDrifting = false;
 
-        // الرابط تاعك
-        const modelUrl = 'car.glb'; 
-
-        loader.load(
-            modelUrl,
-            function (gltf) {
-                carModel = gltf.scene;
-                
-                // صغرناها شوية على حساب الصور باش ما تجيش الكاميرا لداخل
-                carModel.scale.set(0.6, 0.6, 0.6); 
-                carModel.position.y = -1; 
-                
-                scene.add(carModel);
-
-                // إخفاء شاشة التحميل وبداية الأنيميشن
-                const loaderDiv = document.getElementById('loader');
-                loaderDiv.style.opacity = '0';
-                setTimeout(() => {
-                    loaderDiv.style.display = 'none';
-                    // هنا تبدا الأنيميشن تاع الدخلة (تزومي)
-                    isIntroAnimation = true;
-                }, 500);
-            },
-            function (xhr) {
-                const percent = (xhr.loaded / xhr.total * 100);
-                if(percent !== Infinity) {
-                    document.getElementById('loading-text').innerText = `جاري التحميل (${Math.round(percent)}%)`;
-                }
-            },
-            function (error) {
-                console.error('An error happened:', error);
-                document.getElementById('loading-text').innerText = 'حدث خطأ أثناء التحميل!';
-            }
-        );
-
-        // 5. حلقة الأنيميشن (Render Loop)
-        function animate() {
-            requestAnimationFrame(animate);
+        loader.load('car.glb', function (gltf) {
+            carModel = gltf.scene;
             
-            // الأنيميشن السينمائية (تزومي الكاميرا من بعيد للسيارة)
-            if (isIntroAnimation) {
-                // الكاميرا تقرب للـ Z=8 و Y=2 بنعومة (Lerp)
-                camera.position.z += (8 - camera.position.z) * 0.05;
-                camera.position.y += (2 - camera.position.y) * 0.05;
-                
-                // كي توصل الكاميرا قريبة بزاف، نحبسو الأنيميشن ونطلقو التحكم للمستخدم
-                if (Math.abs(camera.position.z - 8) < 0.1) {
-                    isIntroAnimation = false;
-                    controls.enabled = true; // دروك المستخدِم يقدر يدور
+            // تصغير السيارة (عدلها إذا بانت كبيرة)
+            carModel.scale.set(0.4, 0.4, 0.4); 
+            
+            // مكان البداية (بعيدة في اللور ومخفية شوية على اليمين)
+            carModel.position.set(20, -1, -50); 
+            // زاوية البداية (عاطية بالظهر)
+            carModel.rotation.y = Math.PI; 
+            
+            scene.add(carModel);
+
+            document.getElementById('loader').style.opacity = '0';
+            setTimeout(() => {
+                document.getElementById('loader').style.display = 'none';
+                startDriftAnimation();
+            }, 500);
+        });
+
+        // --- 4. برمجة أنيميشن الدريفت بـ Tween.js ---
+        function startDriftAnimation() {
+            isDrifting = true;
+            particleMaterial.opacity = 0.5; // نشعلو الغبار
+
+            // حركة 1: السيارة تجي طايرة للقدام (Z) وتهرب لليسار شوية (X)
+            new TWEEN.Tween(carModel.position)
+                .to({ x: -2, z: 0 }, 1500)
+                .easing(TWEEN.Easing.Quadratic.Out)
+                .start();
+
+            // حركة 2: دوران الدريفت (السيارة تدور 180 درجة باش تقابلك)
+            new TWEEN.Tween(carModel.rotation)
+                .to({ y: Math.PI / 4 }, 1500) // تقابلك بالجنب (فيراج)
+                .easing(TWEEN.Easing.Cubic.Out)
+                .onUpdate(() => {
+                    // الغبار يتبع اللور تاع السيارة
+                    updateDustParticles(carModel.position.x + 2, carModel.position.z + 2);
+                })
+                .onComplete(() => {
+                    // كي تحبس، نطفيو الغبار ونطلقو التحكم
+                    isDrifting = false;
+                    particleMaterial.opacity = 0;
+                    controls.enabled = true;
+                    controls.autoRotate = true; // تبدا تدور وحدها ببطء
+                })
+                .start();
+        }
+
+        // تحديث مكان الغبار
+        function updateDustParticles(x, z) {
+            const positions = particles.geometry.attributes.position.array;
+            for (let i = 0; i < particleCount; i++) {
+                // إرجاع الجزيئات لنقطة الانطلاق (خلف العجلات)
+                if (positions[i * 3 + 1] > 2 || positions[i * 3 + 1] < -1) {
+                    positions[i * 3] = x + (Math.random() - 0.5);
+                    positions[i * 3 + 1] = -1; // على مستوى الأرض
+                    positions[i * 3 + 2] = z + (Math.random() - 0.5);
                 }
+                
+                // تحريكها للأعلى وللخارج
+                positions[i * 3] += particleVelocities[i].x;
+                positions[i * 3 + 1] += particleVelocities[i].y;
+                positions[i * 3 + 2] += particleVelocities[i].z;
+            }
+            particles.geometry.attributes.position.needsUpdate = true;
+        }
+
+        // --- 5. حلقة الأنيميشن ---
+        function animate(time) {
+            requestAnimationFrame(animate);
+            TWEEN.update(time); // تشغيل مكتبة الأنيميشن
+            
+            if (!isDrifting && controls.enabled) {
+                controls.update(); 
+            } else if (isDrifting) {
+                // الكاميرا تتهز شوية باش تعطي إحساس السرعة والقوة
+                camera.position.x = (Math.random() - 0.5) * 0.1;
+                camera.position.y = 3 + (Math.random() - 0.5) * 0.1;
             }
 
-            controls.update(); 
             renderer.render(scene, camera);
         }
         animate();
 
-        // 6. استجابة الشاشة
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
